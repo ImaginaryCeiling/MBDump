@@ -3,50 +3,87 @@ import SwiftUI
 struct ContentView: View {
     @ObservedObject var store: DataStore
     @State private var newItemText = ""
-    @State private var showingNewFolderAlert = false
-    @State private var newFolderName = ""
+    @State private var showingNewCanvasAlert = false
+    @State private var newCanvasName = ""
+    @State private var canvasToRename: Canvas?
+    @State private var renameText = ""
 
     var body: some View {
         NavigationSplitView {
             // Sidebar
-            List(selection: $store.selectedFolderId) {
-                ForEach(store.folders) { folder in
-                    Text(folder.name)
-                        .tag(folder.id)
+            List(selection: $store.selectedCanvasId) {
+                ForEach(store.canvases) { canvas in
+                    Text(canvas.name)
+                        .tag(canvas.id)
+                        .onDrop(of: [.text], delegate: CanvasDropDelegate(canvas: canvas, store: store))
                         .contextMenu {
                             Button("Rename") {
-                                // TODO: Add rename functionality
+                                canvasToRename = canvas
+                                renameText = canvas.name
                             }
-                            if folder.name != "Inbox" {
+                            if canvas.name != "Inbox" {
                                 Button("Delete", role: .destructive) {
-                                    store.deleteFolder(folder)
+                                    store.deleteCanvas(canvas)
                                 }
                             }
                         }
                 }
             }
-            .navigationTitle("Folders")
+            .navigationTitle("Canvases")
             .toolbar {
-                ToolbarItem {
-                    Button(action: { showingNewFolderAlert = true }) {
+                ToolbarItem(placement: .automatic) {
+                    Button(action: { showingNewCanvasAlert = true }) {
                         Image(systemName: "plus")
                     }
                 }
             }
-            .alert("New Folder", isPresented: $showingNewFolderAlert) {
-                TextField("Folder Name", text: $newFolderName)
-                Button("Cancel", role: .cancel) { }
-                Button("Create") {
-                    if !newFolderName.isEmpty {
-                        store.addFolder(name: newFolderName)
-                        newFolderName = ""
+            .safeAreaInset(edge: .bottom) {
+                HStack {
+                    Spacer()
+                    Button(action: { showingNewCanvasAlert = true }) {
+                        HStack {
+                            Image(systemName: "plus.circle.fill")
+                            Text("New Canvas")
+                        }
                     }
+                    .buttonStyle(.borderless)
+                    .padding(8)
+                }
+                .background(Color(nsColor: .controlBackgroundColor))
+            }
+            .alert("New Canvas", isPresented: $showingNewCanvasAlert) {
+                TextField("Canvas Name", text: $newCanvasName)
+                Button("Cancel", role: .cancel) {
+                    newCanvasName = ""
+                }
+                Button("Create") {
+                    if !newCanvasName.isEmpty {
+                        store.addCanvas(name: newCanvasName)
+                        newCanvasName = ""
+                    }
+                }
+            }
+            .alert("Rename Canvas", isPresented: Binding(
+                get: { canvasToRename != nil },
+                set: { if !$0 { canvasToRename = nil } }
+            )) {
+                TextField("Canvas Name", text: $renameText)
+                Button("Cancel", role: .cancel) {
+                    canvasToRename = nil
+                    renameText = ""
+                }
+                Button("Rename") {
+                    if let canvas = canvasToRename, !renameText.isEmpty {
+                        store.renameCanvas(canvas, to: renameText)
+                    }
+                    canvasToRename = nil
+                    renameText = ""
                 }
             }
         } detail: {
             // Main content area
             VStack(spacing: 0) {
-                if let folder = store.selectedFolder {
+                if let canvas = store.selectedCanvas {
                     // Input area
                     VStack {
                         HStack {
@@ -69,7 +106,7 @@ struct ContentView: View {
                     }
 
                     // Items list
-                    if folder.items.isEmpty {
+                    if canvas.items.isEmpty {
                         VStack {
                             Spacer()
                             Text("No items yet")
@@ -81,8 +118,13 @@ struct ContentView: View {
                         }
                     } else {
                         List {
-                            ForEach(folder.items) { item in
+                            ForEach(canvas.items) { item in
                                 ItemRow(item: item)
+                                    .onDrag {
+                                        // Store item ID as drag data
+                                        let itemData = "\(item.id.uuidString)|\(canvas.id.uuidString)"
+                                        return NSItemProvider(object: itemData as NSString)
+                                    }
                                     .contextMenu {
                                         Button("Copy") {
                                             NSPasteboard.general.clearContents()
@@ -98,9 +140,9 @@ struct ContentView: View {
                                         }
 
                                         Menu("Move to...") {
-                                            ForEach(store.folders.filter { $0.id != folder.id }) { targetFolder in
-                                                Button(targetFolder.name) {
-                                                    store.moveItem(item, from: folder, to: targetFolder)
+                                            ForEach(store.canvases.filter { $0.id != canvas.id }) { targetCanvas in
+                                                Button(targetCanvas.name) {
+                                                    store.moveItem(item, from: canvas, to: targetCanvas)
                                                 }
                                             }
                                         }
@@ -108,7 +150,7 @@ struct ContentView: View {
                                         Divider()
 
                                         Button("Delete", role: .destructive) {
-                                            store.deleteItem(item, from: folder)
+                                            store.deleteItem(item, from: canvas)
                                         }
                                     }
                             }
@@ -116,11 +158,11 @@ struct ContentView: View {
                         .listStyle(.plain)
                     }
                 } else {
-                    Text("Select a folder")
+                    Text("Select a canvas")
                         .foregroundColor(.secondary)
                 }
             }
-            .navigationTitle(store.selectedFolder?.name ?? "")
+            .navigationTitle(store.selectedCanvas?.name ?? "")
         }
     }
 
@@ -137,7 +179,7 @@ struct ContentView: View {
         }
 
         let item = Item(content: newItemText, type: type)
-        store.addItem(item)
+        store.addItem(item, to: store.selectedCanvasId)
         newItemText = ""
     }
 }
@@ -184,5 +226,45 @@ struct ItemRow: View {
         case .text: return .primary
         case .file: return .orange
         }
+    }
+}
+
+// Drop delegate for canvas sidebar items
+struct CanvasDropDelegate: DropDelegate {
+    let canvas: Canvas
+    let store: DataStore
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard let itemProvider = info.itemProviders(for: [.text]).first else {
+            return false
+        }
+
+        itemProvider.loadItem(forTypeIdentifier: "public.text", options: nil) { (data, error) in
+            guard let data = data as? Data,
+                  let draggedData = String(data: data, encoding: .utf8) else {
+                return
+            }
+
+            // Parse the item ID and source canvas ID
+            let components = draggedData.split(separator: "|")
+            guard components.count == 2,
+                  let itemId = UUID(uuidString: String(components[0])),
+                  let sourceCanvasId = UUID(uuidString: String(components[1])),
+                  let sourceCanvas = store.canvases.first(where: { $0.id == sourceCanvasId }),
+                  let item = sourceCanvas.items.first(where: { $0.id == itemId }) else {
+                return
+            }
+
+            // Move the item
+            DispatchQueue.main.async {
+                store.moveItem(item, from: sourceCanvas, to: canvas)
+            }
+        }
+
+        return true
+    }
+
+    func validateDrop(info: DropInfo) -> Bool {
+        return info.hasItemsConforming(to: [.text])
     }
 }

@@ -18,20 +18,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var statusBarView: StatusBarView!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Create the status item with variable length
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        // Create the status item
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
-        // Set up button
-        statusItem.button?.image = NSImage(systemSymbolName: "tray.fill", accessibilityDescription: "MBDump")
-        statusItem.button?.action = #selector(togglePopover)
-        statusItem.button?.target = self
-
-        // Add drag & drop overlay view
+        // Configure the button with drag & drop support
         if let button = statusItem.button {
+            button.image = NSImage(systemSymbolName: "tray.fill", accessibilityDescription: "MBDump")
+            button.action = #selector(togglePopover)
+            button.target = self
+
+            // Register the button itself for drag types
+            button.registerForDraggedTypes([
+                .fileURL,
+                .URL,
+                .string,
+                NSPasteboard.PasteboardType(rawValue: "public.url"),
+                NSPasteboard.PasteboardType(rawValue: "public.url-name"),
+                NSPasteboard.PasteboardType(rawValue: "public.utf8-plain-text")
+            ])
+
+            // Create and add our overlay view that intercepts drags
             statusBarView = StatusBarView(store: store)
             statusBarView.frame = button.bounds
             statusBarView.autoresizingMask = [.width, .height]
-            button.addSubview(statusBarView)
+            statusBarView.wantsLayer = true
+            statusBarView.layer?.backgroundColor = NSColor.clear.cgColor
+            button.addSubview(statusBarView, positioned: .above, relativeTo: nil)
         }
 
         // Create the popover
@@ -63,8 +75,25 @@ class StatusBarView: NSView {
         self.store = store
         super.init(frame: .zero)
 
-        // Register for drag types
-        registerForDraggedTypes([.fileURL, .URL, .string])
+        // Register for all common drag types including browser URLs
+        registerForDraggedTypes([
+            .fileURL,
+            .URL,
+            .string,
+            NSPasteboard.PasteboardType(rawValue: "public.url"),
+            NSPasteboard.PasteboardType(rawValue: "public.url-name"),
+            NSPasteboard.PasteboardType(rawValue: "public.utf8-plain-text"),
+            NSPasteboard.PasteboardType(rawValue: "org.chromium.web-custom-data")
+        ])
+    }
+
+    // Allow hit testing - this is key for receiving drag events
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        return self.bounds.contains(point) ? self : nil
+    }
+
+    override var acceptsFirstResponder: Bool {
+        return true
     }
 
     required init?(coder: NSCoder) {
@@ -72,7 +101,6 @@ class StatusBarView: NSView {
     }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        NSLog("Drag entered!")
         return .copy
     }
 
@@ -81,20 +109,17 @@ class StatusBarView: NSView {
     }
 
     override func draggingExited(_ sender: NSDraggingInfo?) {
-        NSLog("Drag exited!")
+        // Visual feedback could go here
     }
 
     override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        NSLog("Prepare for drag")
         return true
     }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        NSLog("Perform drag operation")
-
         let pasteboard = sender.draggingPasteboard
 
-        // Try to get URL first
+        // Try to get URL from pasteboard (this works for file URLs and some web URLs)
         if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL],
            let url = urls.first {
             let content = url.absoluteString
@@ -103,17 +128,25 @@ class StatusBarView: NSView {
             return true
         }
 
-        // Try to get string
-        if let string = pasteboard.string(forType: .string) {
+        // Try public.url type (common for browser drags)
+        if let urlData = pasteboard.data(forType: NSPasteboard.PasteboardType(rawValue: "public.url")),
+           let urlString = String(data: urlData, encoding: .utf8) {
+            addItemToInbox(content: urlString, type: .link)
+            return true
+        }
+
+        // Try to get string (fallback for text and some URLs)
+        if let string = pasteboard.string(forType: .string), !string.isEmpty {
+            let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
             let type: ItemType
-            if string.starts(with: "http://") || string.starts(with: "https://") {
+            if trimmed.starts(with: "http://") || trimmed.starts(with: "https://") {
                 type = .link
-            } else if string.starts(with: "/") || string.starts(with: "~") {
+            } else if trimmed.starts(with: "/") || trimmed.starts(with: "~") {
                 type = .file
             } else {
                 type = .text
             }
-            addItemToInbox(content: string, type: type)
+            addItemToInbox(content: trimmed, type: type)
             return true
         }
 
@@ -121,11 +154,10 @@ class StatusBarView: NSView {
     }
 
     private func addItemToInbox(content: String, type: ItemType) {
-        NSLog("Adding to inbox: \(content)")
         let item = Item(content: content, type: type)
 
-        // Add to first folder (Inbox)
-        if let inboxId = store.folders.first?.id {
+        // Add to first canvas (Inbox)
+        if let inboxId = store.canvases.first?.id {
             store.addItem(item, to: inboxId)
         }
 

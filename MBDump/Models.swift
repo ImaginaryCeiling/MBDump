@@ -20,15 +20,15 @@ struct Item: Identifiable, Codable {
     }
 }
 
-struct Folder: Identifiable, Codable {
+struct Canvas: Identifiable, Codable {
     var id = UUID()
     var name: String
     var items: [Item] = []
 }
 
 class DataStore: ObservableObject {
-    @Published var folders: [Folder] = []
-    @Published var selectedFolderId: UUID?
+    @Published var canvases: [Canvas] = []
+    @Published var selectedCanvasId: UUID?
 
     private let saveURL: URL
 
@@ -39,67 +39,71 @@ class DataStore: ObservableObject {
 
         load()
 
-        // If no folders exist, create default Inbox
-        if folders.isEmpty {
-            let inbox = Folder(name: "Inbox")
-            folders.append(inbox)
-            selectedFolderId = inbox.id
+        // If no canvases exist, create default Inbox
+        if canvases.isEmpty {
+            let inbox = Canvas(name: "Inbox")
+            canvases.append(inbox)
+            selectedCanvasId = inbox.id
             save()
         }
     }
 
-    var selectedFolder: Folder? {
-        folders.first { $0.id == selectedFolderId }
+    var selectedCanvas: Canvas? {
+        canvases.first { $0.id == selectedCanvasId }
     }
 
-    func addFolder(name: String) {
-        let folder = Folder(name: name)
-        folders.append(folder)
-        save()
-    }
-
-    func deleteFolder(_ folder: Folder) {
-        folders.removeAll { $0.id == folder.id }
-        if selectedFolderId == folder.id {
-            selectedFolderId = folders.first?.id
+    func addCanvas(name: String) {
+        let canvas = Canvas(name: name)
+        canvases.append(canvas)
+        // Delay selection to avoid "Publishing changes from within view updates" warning
+        DispatchQueue.main.async {
+            self.selectedCanvasId = canvas.id
         }
         save()
     }
 
-    func renameFolder(_ folder: Folder, to newName: String) {
-        if let index = folders.firstIndex(where: { $0.id == folder.id }) {
-            folders[index].name = newName
+    func deleteCanvas(_ canvas: Canvas) {
+        canvases.removeAll { $0.id == canvas.id }
+        if selectedCanvasId == canvas.id {
+            selectedCanvasId = canvases.first?.id
+        }
+        save()
+    }
+
+    func renameCanvas(_ canvas: Canvas, to newName: String) {
+        if let index = canvases.firstIndex(where: { $0.id == canvas.id }) {
+            canvases[index].name = newName
             save()
         }
     }
 
-    func addItem(_ item: Item, to folderId: UUID? = nil) {
-        let targetId = folderId ?? folders.first?.id
-        if let index = folders.firstIndex(where: { $0.id == targetId }) {
-            folders[index].items.insert(item, at: 0)
+    func addItem(_ item: Item, to canvasId: UUID? = nil) {
+        let targetId = canvasId ?? canvases.first?.id
+        if let index = canvases.firstIndex(where: { $0.id == targetId }) {
+            canvases[index].items.insert(item, at: 0)
             save()
         }
     }
 
-    func deleteItem(_ item: Item, from folder: Folder) {
-        if let folderIndex = folders.firstIndex(where: { $0.id == folder.id }) {
-            folders[folderIndex].items.removeAll { $0.id == item.id }
+    func deleteItem(_ item: Item, from canvas: Canvas) {
+        if let canvasIndex = canvases.firstIndex(where: { $0.id == canvas.id }) {
+            canvases[canvasIndex].items.removeAll { $0.id == item.id }
             save()
         }
     }
 
-    func moveItem(_ item: Item, from sourceFolder: Folder, to targetFolder: Folder) {
-        if let sourceIndex = folders.firstIndex(where: { $0.id == sourceFolder.id }),
-           let targetIndex = folders.firstIndex(where: { $0.id == targetFolder.id }) {
-            folders[sourceIndex].items.removeAll { $0.id == item.id }
-            folders[targetIndex].items.insert(item, at: 0)
+    func moveItem(_ item: Item, from sourceCanvas: Canvas, to targetCanvas: Canvas) {
+        if let sourceIndex = canvases.firstIndex(where: { $0.id == sourceCanvas.id }),
+           let targetIndex = canvases.firstIndex(where: { $0.id == targetCanvas.id }) {
+            canvases[sourceIndex].items.removeAll { $0.id == item.id }
+            canvases[targetIndex].items.insert(item, at: 0)
             save()
         }
     }
 
     private func save() {
         do {
-            let data = try JSONEncoder().encode(folders)
+            let data = try JSONEncoder().encode(canvases)
             try data.write(to: saveURL)
         } catch {
             print("Failed to save: \(error)")
@@ -109,9 +113,9 @@ class DataStore: ObservableObject {
     private func load() {
         do {
             let data = try Data(contentsOf: saveURL)
-            folders = try JSONDecoder().decode([Folder].self, from: data)
-            if let firstFolder = folders.first {
-                selectedFolderId = firstFolder.id
+            canvases = try JSONDecoder().decode([Canvas].self, from: data)
+            if let firstCanvas = canvases.first {
+                selectedCanvasId = firstCanvas.id
             }
         } catch {
             print("Failed to load (might be first run): \(error)")
