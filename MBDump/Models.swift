@@ -7,10 +7,17 @@ enum ItemType: Codable {
 }
 
 struct Item: Identifiable, Codable {
-    var id = UUID()
+    let id: UUID
     var content: String
     var type: ItemType
-    var createdAt: Date = Date()
+    var createdAt: Date
+
+    init(id: UUID = UUID(), content: String, type: ItemType, createdAt: Date = Date()) {
+        self.id = id
+        self.content = content
+        self.type = type
+        self.createdAt = createdAt
+    }
 
     var displayContent: String {
         if type == .link, let url = URL(string: content) {
@@ -81,6 +88,25 @@ class DataStore: ObservableObject {
         let targetId = canvasId ?? canvases.first?.id
         if let index = canvases.firstIndex(where: { $0.id == targetId }) {
             canvases[index].items.insert(item, at: 0)
+            save()
+        }
+    }
+
+    func updateItem(_ item: Item, in canvas: Canvas, newContent: String) {
+        if let canvasIndex = canvases.firstIndex(where: { $0.id == canvas.id }),
+           let itemIndex = canvases[canvasIndex].items.firstIndex(where: { $0.id == item.id }) {
+            // Determine new type based on content
+            let type: ItemType
+            if newContent.starts(with: "http://") || newContent.starts(with: "https://") {
+                type = .link
+            } else if newContent.starts(with: "/") || newContent.starts(with: "~") {
+                type = .file
+            } else {
+                type = .text
+            }
+
+            canvases[canvasIndex].items[itemIndex].content = newContent
+            canvases[canvasIndex].items[itemIndex].type = type
             save()
         }
     }

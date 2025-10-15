@@ -39,7 +39,6 @@ struct ContentView: View {
             }
             .safeAreaInset(edge: .bottom) {
                 HStack {
-                    Spacer()
                     Button(action: { showingNewCanvasAlert = true }) {
                         HStack {
                             Image(systemName: "plus.circle.fill")
@@ -48,6 +47,7 @@ struct ContentView: View {
                     }
                     .buttonStyle(.borderless)
                     .padding(8)
+                    Spacer()
                 }
                 .background(Color(nsColor: .controlBackgroundColor))
             }
@@ -87,6 +87,14 @@ struct ContentView: View {
                     // Input area
                     VStack {
                         HStack {
+                            Button(action: {
+                                NSApp.keyWindow?.firstResponder?.tryToPerform(#selector(NSSplitViewController.toggleSidebar(_:)), with: nil)
+                            }) {
+                                Image(systemName: "sidebar.left")
+                            }
+                            .buttonStyle(.plain)
+                            .help("Toggle Sidebar")
+
                             TextField("Type or paste a link, note, or file path...", text: $newItemText)
                                 .textFieldStyle(.plain)
                                 .onSubmit {
@@ -119,7 +127,7 @@ struct ContentView: View {
                     } else {
                         List {
                             ForEach(canvas.items) { item in
-                                ItemRow(item: item)
+                                ItemRow(item: item, canvas: canvas, store: store)
                                     .onDrag {
                                         // Store item ID as drag data
                                         let itemData = "\(item.id.uuidString)|\(canvas.id.uuidString)"
@@ -186,6 +194,12 @@ struct ContentView: View {
 
 struct ItemRow: View {
     let item: Item
+    let canvas: Canvas
+    let store: DataStore
+
+    @State private var isEditing = false
+    @State private var editText: String = ""
+    @FocusState private var isFocused: Bool
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -194,22 +208,65 @@ struct ItemRow: View {
                 .frame(width: 16)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(item.displayContent)
-                    .lineLimit(1)
+                if isEditing {
+                    TextField("", text: $editText)
+                        .textFieldStyle(.plain)
+                        .focused($isFocused)
+                        .onSubmit {
+                            saveEdit()
+                        }
+                        .onChange(of: isFocused) { oldValue, newValue in
+                            if !newValue && isEditing {
+                                saveEdit()
+                            }
+                        }
+                } else {
+                    Text(item.displayContent)
+                        .lineLimit(1)
+                        .onTapGesture(count: 2) {
+                            startEditing()
+                        }
+                }
 
-                if item.type == .link {
+                if !isEditing && item.type == .link {
                     Text(item.content)
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                 }
 
-                Text(item.createdAt, style: .relative)
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
+                if !isEditing {
+                    Text(item.createdAt, style: .relative)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
             }
+
+            Spacer()
+
+            Button(role: .destructive, action: {
+                store.deleteItem(item, from: canvas)
+            }) {
+                Label("", systemImage: "trash")
+            }
+            .buttonStyle(.plain)
+            .foregroundColor(.red)
+
         }
         .padding(.vertical, 4)
+    }
+
+    private func startEditing() {
+        editText = item.content
+        isEditing = true
+        isFocused = true
+    }
+
+    private func saveEdit() {
+        if !editText.isEmpty && editText != item.content {
+            store.updateItem(item, in: canvas, newContent: editText)
+        }
+        isEditing = false
     }
 
     private var iconName: String {
