@@ -30,7 +30,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Create the popover
         popover = NSPopover()
         popover.contentSize = NSSize(width: 600, height: 400)
-        popover.behavior = .transient
+        popover.behavior = .semitransient  // Closes when clicking outside
 
         let contentView = ContentView(store: store)
         popover.contentViewController = NSHostingController(rootView: contentView)
