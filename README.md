@@ -1,3 +1,5 @@
+![image of MBDump](https://arnavchauhan.com/_next/image?url=%2Fstatic%2Fimages%2FMBDump.png&w=1200&q=75)
+
 # MBDump - Menu Bar Dump 💩
 
 A lightweight macOS menu bar app for quickly capturing and organizing links, notes, and files.
