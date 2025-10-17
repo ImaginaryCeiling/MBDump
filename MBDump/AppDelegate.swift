@@ -19,6 +19,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.action = #selector(togglePopover)
         statusItem.button?.target = self
 
+        // Add right-click menu
+        statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
+
         // Add drag & drop overlay view
         if let button = statusItem.button {
             statusBarView = StatusBarView(store: store)
@@ -37,12 +40,34 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func togglePopover() {
-        if let button = statusItem.button {
+        guard let button = statusItem.button else { return }
+
+        // Check if it's a right-click
+        if let event = NSApp.currentEvent, event.type == .rightMouseUp {
+            showContextMenu()
+        } else {
+            // Left-click - toggle popover
             if popover.isShown {
                 popover.performClose(nil)
             } else {
                 popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             }
         }
+    }
+
+    private func showContextMenu() {
+        let menu = NSMenu()
+
+        menu.addItem(NSMenuItem(title: "Open MBDump", action: #selector(togglePopover), keyEquivalent: ""))
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(NSMenuItem(title: "Quit", action: #selector(quitApp), keyEquivalent: "q"))
+
+        statusItem.menu = menu
+        statusItem.button?.performClick(nil)
+        statusItem.menu = nil
+    }
+
+    @objc func quitApp() {
+        NSApplication.shared.terminate(nil)
     }
 }
