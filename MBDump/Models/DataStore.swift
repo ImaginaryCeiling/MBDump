@@ -11,7 +11,6 @@ class DataStore: ObservableObject {
         // Set up save location
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         saveURL = documentsPath.appendingPathComponent("mbdump_data.json")
-
         load()
 
         // If no canvases exist, create default Inbox
@@ -92,6 +91,16 @@ class DataStore: ObservableObject {
             canvases[sourceIndex].items.removeAll { $0.id == item.id }
             canvases[targetIndex].items.insert(item, at: 0)
             save()
+        }
+    }
+    
+    func updateItemTitle(itemId: UUID, title: String?) {
+        for canvasIndex in canvases.indices {
+            if let itemIndex = canvases[canvasIndex].items.firstIndex(where: { $0.id == itemId }) {
+                canvases[canvasIndex].items[itemIndex].title = title
+                save()
+                break
+            }
         }
     }
 
