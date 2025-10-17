@@ -29,6 +29,9 @@ struct ContentView: View {
                             }
                         }
                 }
+                .onMove { indices, newOffset in
+                    moveCanvases(from: indices, to: newOffset)
+                }
             }
             .navigationTitle("Canvases")
             .toolbar {
@@ -129,11 +132,6 @@ struct ContentView: View {
                         List {
                             ForEach(canvas.items) { item in
                                 ItemRow(item: item, canvas: canvas, store: store)
-                                    .onDrag {
-                                        // Store item ID as drag data
-                                        let itemData = "\(item.id.uuidString)|\(canvas.id.uuidString)"
-                                        return NSItemProvider(object: itemData as NSString)
-                                    }
                                     .contextMenu {
                                         Button("Copy") {
                                             NSPasteboard.general.clearContents()
@@ -163,6 +161,9 @@ struct ContentView: View {
                                         }
                                     }
                             }
+                            .onMove { indices, newOffset in
+                                moveItems(at: indices, to: newOffset, in: canvas)
+                            }
                         }
                         .listStyle(.plain)
                     }
@@ -190,11 +191,19 @@ struct ContentView: View {
         let item = Item(content: newItemText, type: type)
         store.addItem(item, to: store.selectedCanvasId)
         newItemText = ""
-        
+
         // Fetch title for links asynchronously
         if type == .link {
             fetchWebsiteTitle(for: item)
         }
+    }
+
+    private func moveItems(at indices: IndexSet, to newOffset: Int, in canvas: Canvas) {
+        store.reorderItems(in: canvas, from: indices, to: newOffset)
+    }
+
+    private func moveCanvases(from indices: IndexSet, to newOffset: Int) {
+        store.reorderCanvases(from: indices, to: newOffset)
     }
     
     private func isURL(_ text: String) -> Bool {

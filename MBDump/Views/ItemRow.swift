@@ -62,6 +62,7 @@ struct ItemRow: View {
 
         }
         .padding(.vertical, 4)
+        .padding(.horizontal, 8)
     }
 
     private func startEditing() {

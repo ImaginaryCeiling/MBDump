@@ -104,6 +104,18 @@ class DataStore: ObservableObject {
         }
     }
 
+    func reorderItems(in canvas: Canvas, from indices: IndexSet, to newOffset: Int) {
+        if let canvasIndex = canvases.firstIndex(where: { $0.id == canvas.id }) {
+            canvases[canvasIndex].items.move(fromOffsets: indices, toOffset: newOffset)
+            save()
+        }
+    }
+
+    func reorderCanvases(from indices: IndexSet, to newOffset: Int) {
+        canvases.move(fromOffsets: indices, toOffset: newOffset)
+        save()
+    }
+
     private func save() {
         do {
             let data = try JSONEncoder().encode(canvases)
