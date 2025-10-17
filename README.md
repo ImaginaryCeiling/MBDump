@@ -1,4 +1,4 @@
-# MBDump - Menu Bar Dump
+# MBDump - Menu Bar Dump 💩
 
 A lightweight macOS menu bar app for quickly capturing and organizing links, notes, and files.
 
