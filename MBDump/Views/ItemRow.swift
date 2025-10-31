@@ -7,13 +7,27 @@ struct ItemRow: View {
 
     @State private var isEditing = false
     @State private var editText: String = ""
+    @State private var isNotesExpanded = false
+    @State private var notesText: String = ""
     @FocusState private var isFocused: Bool
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            Image(systemName: iconName)
-                .foregroundColor(iconColor)
+            // Checkbox for todo canvases
+            if canvas.type == .todo {
+                Button(action: {
+                    store.toggleItemCompletion(item, in: canvas)
+                }) {
+                    Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
+                        .foregroundColor(item.isCompleted ? .green : .secondary)
+                }
+                .buttonStyle(.plain)
                 .frame(width: 16)
+            } else {
+                Image(systemName: iconName)
+                    .foregroundColor(iconColor)
+                    .frame(width: 16)
+            }
 
             VStack(alignment: .leading, spacing: 4) {
                 if isEditing {
@@ -36,7 +50,38 @@ struct ItemRow: View {
                         }
                 }
 
-                if !isEditing && item.type == .link {
+                // For articles canvas: show notes section instead of URL
+                if !isEditing && canvas.type == .articles && item.type == .link {
+                    Button(action: {
+                        isNotesExpanded.toggle()
+                        if isNotesExpanded && notesText.isEmpty {
+                            notesText = item.notes ?? ""
+                        }
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: isNotesExpanded ? "chevron.down" : "chevron.right")
+                                .font(.caption2)
+                            Text(isNotesExpanded ? "Hide notes" : "Show notes")
+                                .font(.caption)
+                        }
+                        .foregroundColor(.blue)
+                    }
+                    .buttonStyle(.plain)
+
+                    if isNotesExpanded {
+                        TextEditor(text: $notesText)
+                            .frame(minHeight: 60, maxHeight: 150)
+                            .font(.caption)
+                            .padding(4)
+                            .background(Color(nsColor: .controlBackgroundColor))
+                            .cornerRadius(4)
+                            .onChange(of: notesText) { oldValue, newValue in
+                                // Debounce could be added here
+                                store.updateItemNotes(item, in: canvas, notes: newValue.isEmpty ? nil : newValue)
+                            }
+                    }
+                } else if !isEditing && item.type == .link && canvas.type != .articles {
+                    // Default behavior: show URL for non-articles canvases
                     Text(item.content)
                         .font(.caption)
                         .foregroundColor(.secondary)
